@@ -1,0 +1,61 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Sync version with tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "Syncing package.json version to $VERSION"
+          npm version $VERSION --no-git-tag-version --allow-same-version
+
+      - name: Build Frontend & Type Check
+        run: |
+          npx tsc
+          npx vite build
+
+      - name: Package and Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx electron-builder --publish always
+
+      - name: Update Release Notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          cat <<EOF > release_notes.md
+          ## 更新日志
+          修复了一些已知问题
+
+          ## 加入我们的群
+          [点击加入 Telegram 群](https://t.me/+hn3QzNc4DbA0MzNl)
+          EOF
+          
+          gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
